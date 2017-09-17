@@ -34,11 +34,15 @@ import os
 import ycm_core
 
 flags = [
-    '-x',
-    'c',
-    '-DHAVE_CONFIG_H',
-    '-I.',
-    '-I./src',
+        '-Wall',
+        '-Werror',
+        '-x',
+        'c',
+        '-DHAVE_CONFIG_H',
+        '-I.',
+        '-I./src',
+        '-I/usr/include/',
+        '-I/usr/lib/'
 ]
 
 
@@ -90,7 +94,7 @@ def MakeRelativePathsInFlagsAbsolute( flags, working_directory ):
         break
 
     if new_flag:
-      new_flags.append( new_flag )
+        new_flags.append( new_flag )
   return new_flags
 
 
