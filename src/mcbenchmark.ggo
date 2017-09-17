@@ -1,0 +1,4 @@
+purpose "This is tool mearsure the performance of an Memcached."
+versiontext "Apache 2.0 mlelansky"
+
+option "url" u "The url of the Memcached server." string typestr="serveraddress" default="localhost:11211" required multiple
