@@ -1,0 +1,14 @@
+# This is the exclusion file for git.
+
+Makefile
+Makefile.in
+*.m4
+autom4te.cache/
+build-aux/
+*.log
+*.status
+configure
+config.h
+config.h.in
+**/stamp-h1
+**/.deps/
