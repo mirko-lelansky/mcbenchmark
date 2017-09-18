@@ -1,0 +1,30 @@
+mcbenchmark
+
+Description
+------------
+
+
+This is a benchmark tool for memcached, which used the library libmemcached.
+The program based on the tool redis-benchmark and the different implementations
+like http://www.github.com/idning/mc-benchmark and
+http://www.github.com/antirez/mc-benchmark.
+
+Installation
+--------------
+
+See in the INSTALL file for the concrete install instruction.
+
+Usage
+------
+
+Run the tool with the options -h or --help to see the usage instraction of the
+program.
+
+CONTRIBUTING
+-------------
+
+License
+--------
+
+The project is licensed under the Apache 2 License - see the COPYING file for
+details.
