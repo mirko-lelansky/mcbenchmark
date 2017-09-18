@@ -9,22 +9,22 @@
 #include <pthread.h>
 #include "cmdline.h"
 
-#define MAX_VALUES 5000
+#define MAX_LATENCY 50
 
 struct benchmarkData {
     unsigned long startTimeInMs;
-    char *title;
+    char * title;
     unsigned short payload;
-    unsigned int *times;
+    unsigned int * times;
     unsigned short clients;
     unsigned int requests;
 };
 
 struct taskData {
     unsigned short requests;
-    char *connectionUrl;
+    memcached_st * memc;
     unsigned short payload;
-    unsigned int *results;
+    unsigned int times[MAX_LATENCY];
 };
 
 unsigned long generateTimeInMs()
@@ -39,7 +39,7 @@ unsigned long generateTimeInMs()
 char * generateRandomValue(unsigned short size)
 {
     char * value = (char *)malloc((size + 3) * sizeof(char));
-    if(value)
+    if(value != NULL)
     {
         memset(value, 'x', size);
         value[size] = '\r';
@@ -63,51 +63,63 @@ struct benchmarkData * prepareBenchmark(char *title, struct gengetopt_args_info 
         benchmark->payload = options->datasize_arg;
         benchmark->clients = options->clients_arg;
         benchmark->requests = benchmark->clients * options->requests_arg;
-        unsigned int * values = (unsigned int *)malloc(MAX_VALUES * sizeof(unsigned int));
-        if(values)
+        unsigned int * values = (unsigned int *) malloc(MAX_LATENCY * sizeof(unsigned int));
+        if(values != NULL)
         {
+            for(int i = 0; i < MAX_LATENCY; i++)
+            {
+                values[i] = 0;
+            }
             benchmark->times = values;
+            return benchmark;
         }
-        else
-        {
-            // TODO
+        else {
+            free(benchmark);
+            return NULL;
         }
     }
     else
     {
-        //TODO
+        return NULL;
     }
-    return benchmark;
+}
+
+void cleanBenchmark(struct benchmarkData *benchmark)
+{
+    free(benchmark->times);
+    free(benchmark);
 }
 
 void finishBenchmark(struct benchmarkData *benchmark)
 {
     // Calculate the used time
-    long endTimeInMs = generateTimeInMs();
-    long duration = endTimeInMs - benchmark->startTimeInMs;
+    unsigned long endTimeInMs = generateTimeInMs();
+    unsigned long duration = endTimeInMs - benchmark->startTimeInMs;
     unsigned int seen = 0;
     double perc, reqpersec = 0;
 
-    reqpersec = benchmark->requests/(duration/1000);
+    unsigned long durationInSec = duration / 1000;
+
+    if (durationInSec > 0)
+    {
+        reqpersec = benchmark->requests/durationInSec;
+    }
     // Print the results
     printf("====== %s ======\r\n", benchmark->title);
     printf("The benchmark sends %d requests %ld milli seconds.\r\n", benchmark->requests, duration);
     printf("The test uses %d parallel clients.\r\n", benchmark->clients);
     printf("The test uses %d bytes of payload.\r\n", benchmark->payload);
 
-    for(int i = 0; i < MAX_VALUES; i++)
+    for(int i = 0; i < MAX_LATENCY; i++)
     {
-        if(benchmark->times[i])
-        {
-            seen += benchmark->times[i];
-            perc = (seen*100.0)/benchmark->requests;
-            printf("%.2f%% <= %d milli seconds \r\n", perc, i);
-        }
+        seen += benchmark->times[i];
+        perc = (seen*100.0)/benchmark->requests;
+        printf("%.2f%% <= %d milli seconds \r\n", perc, i);
     }
     printf("%.2f requests per second\r\n", reqpersec);
 
     // Free resources
-    free(benchmark);
+    cleanBenchmark(benchmark);
 }
 
 struct benchmarkData * prepareGetBenchmark(struct gengetopt_args_info *options)
@@ -128,72 +140,44 @@ void cleanOptions(struct gengetopt_args_info *options)
 
 char * generateConnectionUrl(char **entries, unsigned int count)
 {
-    char *connection_string;
+    char *connectionUrl;
     const char *server_prefix = "--SERVER=";
-    const size_t server_prefix_len = strlen(server_prefix);
-    size_t len = 0;
+    const unsigned int server_prefix_len = strlen(server_prefix);
+    unsigned int len = 0;
     for (int i = 0; i < count; i++)
     {
         len += server_prefix_len + strlen(entries[i]) + 1;
     }
-    connection_string = (char *)malloc(len * sizeof(char));
-    if(connection_string)
+    connectionUrl = (char *)malloc(len * sizeof(char));
+    if(connectionUrl)
     {
-        memcpy(connection_string, "\0", 1);
+        memcpy(connectionUrl, "\0", 1);
         for (int i = 0; i < count; i++)
         {
-            if(count == 1)
+            char * temp = (char*)malloc((server_prefix_len + strlen(entries[i]) + 1 )*sizeof(char));
+            if(temp)
             {
-                char *temp = (char *)malloc((server_prefix_len + strlen(entries[i]) + 1) * sizeof(char));
-                if(temp || i == (count-1))
+                if(count == 1 || i == 0)
                 {
                     sprintf(temp, "%s%s", server_prefix, entries[i]);
-                    strcat(connection_string, temp);
-                    free(temp);
                 }
                 else
                 {
-                    char *temp = (char *)malloc((server_prefix_len + strlen(entries[i]) + 1)*sizeof(char));
-                    if(temp)
-                    {
-                        sprintf(temp, "%s%s ", server_prefix, entries[i]);
-                        strcat(connection_string, temp);
-                        free(temp);
-                    }
-                    else
-                    {
-                        //TODO
-                    }
+                    sprintf(temp, " %s%s", server_prefix, entries[i]);
                 }
-            }
-            else
-            {
+                strcat(connectionUrl, temp);
+                free(temp);
             }
         }
+        return connectionUrl;
     }
     else
     {
-        //TODO
+        return NULL;
     }
-    return connection_string;
 }
 
-memcached_return_t set(memcached_st *memc, const char *key, const char *value, time_t expiration_date, uint32_t flags)
-{
-    memcached_return_t result = memcached_set(memc, key, strlen(key), value, strlen(value), expiration_date, flags);
-    if(result != MEMCACHED_SUCCESS)
-    {
-        //TODO
-    }
-    return result;
-}
-
-char * get(memcached_st *memc, const char *key, size_t value_len, uint32_t flags, memcached_return_t mem_result)
-{
-    return memcached_get(memc, key, strlen(key), &value_len, &flags, &mem_result);
-}
-
-void executeGetBenchmark(struct gengetopt_args_info *options, char *connection_string)
+/*void executeGetBenchmark(struct gengetopt_args_info *options, char *connection_string)
 {
     // Prepare get test
     struct benchmarkData * getData = prepareGetBenchmark(options);
@@ -208,9 +192,9 @@ void executeGetBenchmark(struct gengetopt_args_info *options, char *connection_s
             if(result == MEMCACHED_SUCCESS)
             {
                 getData->startTimeInMs = 0;
-                char *mem_value = get(memc, key, strlen(value), (time_t)0, result);
+                //char *mem_value = get(memc, key, strlen(value), (time_t)0, result);
                 free(value);
-                free(mem_value);
+                //free(mem_value);
                 memcached_free(memc);
 
                 if(result == MEMCACHED_SUCCESS)
@@ -249,97 +233,109 @@ void executeGetBenchmark(struct gengetopt_args_info *options, char *connection_s
         free(connection_string);
         exit(EXIT_FAILURE);
     }
-}
+}*/
 
 void * sendTask(void *args)
 {
     struct taskData *data = (struct taskData *) args;
-    memcached_st *memc = memcached(data->connectionUrl, strlen(data->connectionUrl));
-    if(memc)
+    for(int i = 0; i < MAX_LATENCY; i++)
     {
-        for (int i = 0; i < data->requests; i++)
+        data->times[i] = 0;
+    }
+    for (int i = 0; i < data->requests; i++)
+    {
+        unsigned long start = generateTimeInMs();
+        const char *key = "foo_123";
+        char *value = generateRandomValue(data->payload);
+        if(value != NULL)
         {
-            long start = generateTimeInMs();
-            const char *key = "foo_123";
-            char *value = generateRandomValue(data->payload);
-            memcached_return_t result = set(memc, key, value, (time_t)0, (uint32_t)0);
+            memcached_return_t result = memcached_set(data->memc, key, strlen(key), value, strlen(value), (time_t)0, (uint32_t)0);
             free(value);
             if(result == MEMCACHED_SUCCESS)
             {
-                long end = generateTimeInMs();
-                long duration = end - start;
-                if(duration > MAX_VALUES)
+                unsigned long end = generateTimeInMs();
+                unsigned long duration = (size_t)end - start;
+                if(duration > MAX_LATENCY)
                 {
-                    duration = MAX_VALUES;
+                    duration = MAX_LATENCY;
                 }
-                data->results[duration]++;
+                data->times[duration]++;
             }
         }
-        memcached_free(memc);
     }
-    else
-    {
-        // TODO
-        free(data);
-        exit(EXIT_FAILURE);
-    }
-    pthread_exit(data);
+    pthread_exit(0);
 }
 
-void executeSetBenchmark(struct gengetopt_args_info *options, char *connection_string)
+void executeSetBenchmark(struct gengetopt_args_info *options, char *connectionUrl)
 {
     struct benchmarkData * setData = prepareSetBenchmark(options);
-    if(setData)
+    if(setData != NULL)
     {
-        pthread_t workers[options->clients_arg];
-        struct taskData * task_data[options->clients_arg];
-        for (int i = 0; i < options->clients_arg; i++)
+        //define the thread array and result array
+        pthread_t * workers = (pthread_t *) malloc(options->clients_arg * sizeof(pthread_t));
+        if(workers != NULL)
         {
-            struct taskData *data = (struct taskData *) malloc(sizeof(struct taskData));
-            if(data)
+            struct taskData ** taskDatas = (struct taskData **)malloc(options->clients_arg * sizeof(struct taskData *));
+            for(int i = 0; i < options->clients_arg; i++)
             {
-                data->connectionUrl = connection_string;
-                data->payload = options->datasize_arg;
-                data->requests = options->requests_arg;
-                unsigned int * results = (unsigned int *)malloc(MAX_VALUES * sizeof(unsigned int));
-                data->results = results;
-                task_data[i] = data;
-                int res = pthread_create(&workers[i], NULL, sendTask, (void *) data);
-                if(res != 0)
+                taskDatas[i] = NULL;
+            }
+            if(taskDatas != NULL)
+            {
+                // setup the parameter structure for the threads
+                for(int i = 0; i < options->clients_arg; i++)
                 {
-                    free(connection_string);
-                    cleanOptions(options);
-                    exit(EXIT_FAILURE);
+                    struct taskData * data = (struct taskData *)malloc(sizeof(struct taskData));
+                    if(data != NULL)
+                    {
+                        data->memc = memcached(connectionUrl, strlen(connectionUrl));
+                        data->payload = options->datasize_arg;
+                        data->requests = options->requests_arg;
+                        taskDatas[i] = data;
+                    }
                 }
-            }
-            else
-            {
-                free(connection_string);
-                cleanOptions(options);
-                exit(EXIT_FAILURE);
-            }
-        }
-        for (int i = 0; i < options->clients_arg; i++)
-        {
-            int res = pthread_join(workers[i], (void **)task_data[i]);
-            if(res == 0)
-            {
-                unsigned int * result = setData->times;
-                unsigned int * tmp = task_data[i]->results;
-                for(int i = 0; i < MAX_VALUES; i++)
-                {
-                    result[i] += tmp[i];
-                }
-                free(task_data[i]);
-            }
-            else
-            {
-                free(connection_string);
-                cleanOptions(options);
-                exit(EXIT_FAILURE);
-            }
-        }
 
+                // create the threads
+                for(int i = 0; i < options->clients_arg; i++)
+                {
+                    if(taskDatas[i] != NULL)
+                    {
+                        pthread_create(&workers[i], NULL, sendTask, (void *)taskDatas[i]);
+                    }
+                }
+
+                // join the threads
+                for(int i = 0; i < options->clients_arg; i++)
+                {
+                    pthread_join(workers[i], NULL);
+                }
+
+                // combine the results
+                for(int i = 0; i < options->clients_arg; i++)
+                {
+                    unsigned int * times = taskDatas[i]->times;
+                    for(int j = 0; j < MAX_LATENCY; j++)
+                    {
+                        setData->times[j] += times[j];
+                    }
+                }
+
+                for(int i = 0; i < options->clients_arg; i++)
+                {
+                    if(taskDatas[i] != NULL)
+                    {
+                        memcached_free(taskDatas[i]->memc);
+                        free(taskDatas[i]);
+                    }
+                }
+                free(taskDatas);
+                free(workers);
+            }
+            else
+            {
+                free(workers);
+            }
+        }
         finishBenchmark(setData);
     }
 }
@@ -347,53 +343,59 @@ void executeSetBenchmark(struct gengetopt_args_info *options, char *connection_s
 int main(int argc, char *argv[])
 {
     struct gengetopt_args_info *options = (struct gengetopt_args_info *) malloc(sizeof(struct gengetopt_args_info));
-    char *connection_string;
+    char *connectionUrl;
 
-    if (cmdline_parser(argc, argv, options) == 0)
+    if(options)
     {
-        unsigned int count = options->url_given ? options->url_given : 1;
-        options->datasize_arg = (options->datasize_arg < 0 || options->datasize_arg > 30000) ? 3 : options->datasize_arg;
-        connection_string = generateConnectionUrl(options->url_arg, count);
-
-        if(connection_string)
+        if (cmdline_parser(argc, argv, options) == 0)
         {
-            for (int i = 0; i < options->test_given; i++) {
-                enum enum_test test_method = options->test_arg[i];
+            unsigned int count = options->url_given ? options->url_given : 1;
+            options->datasize_arg = (options->datasize_arg < 0 || options->datasize_arg > 30000) ? 3 : options->datasize_arg;
+            connectionUrl = generateConnectionUrl(options->url_arg, count);
 
-                switch (test_method) {
-                    case test_arg_get:
-                    {
-                        executeGetBenchmark(options, connection_string);
-                        break;
-                    }
-                    case test_arg_set:
-                    {
-                        executeSetBenchmark(options, connection_string);
-                        break;
-                    }
-                    default:
-                    {
-                        break;
-                    }
+            if(connectionUrl != NULL)
+            {
+                for (int i = 0; i < options->test_given; i++) {
+                    enum enum_test test_method = options->test_arg[i];
 
+                    switch (test_method) {
+                        case test_arg_get:
+                        {
+                            //executeGetBenchmark(options, connectionUrl);
+                            break;
+                        }
+                        case test_arg_set:
+                        {
+                            executeSetBenchmark(options, connectionUrl);
+                            break;
+                        }
+                        default:
+                        {
+                            break;
+                        }
+                    }
                 }
+                free(connectionUrl);
+                cleanOptions(options);
+                exit(EXIT_SUCCESS);
+            }
+            else
+            {
+                cleanOptions(options);
+                printf("The connection string couldn't be build.\r\n");
+                exit(EXIT_FAILURE);
             }
         }
         else
         {
             cleanOptions(options);
-            printf("The connection string couldn't be build.\r\n");
+            printf("The commandline options couldn't parsed.\r\n");
             exit(EXIT_FAILURE);
         }
-
     }
     else
     {
-        cleanOptions(options);
-        printf("The commandline options couldn't parsed.\r\n");
+        printf("The options struct couldn't be created.\r\n");
         exit(EXIT_FAILURE);
     }
-    cleanOptions(options);
-    free(connection_string);
-    exit(EXIT_SUCCESS);
  }
