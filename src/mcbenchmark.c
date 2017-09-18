@@ -43,90 +43,119 @@ void clean_options(struct gengetopt_args_info *options)
     free(options);
 }
 
+char *build_connection_string(char **entries, unsigned int count)
+{
+    char *connection_string;
+    const char *server_prefix = "--SERVER";
+    const size_t server_prefix_len = strlen(server_prefix);
+    size_t len = 0;
+    for (int i = 0; i < count; i++)
+    {
+        len += server_prefix_len + strlen(entries[i]) + 2;
+    }
+    connection_string = (char *)malloc(len * sizeof(char));
+    if(connection_string)
+    {
+        memcpy(connection_string, "\0", 1);
+        for (int i = 0; i < count; i++)
+        {
+            char *temp = (char *)malloc((server_prefix_len + strlen(entries[i]) + 2)*sizeof(char));
+            if(temp)
+            {
+                sprintf(temp, "%s%s ", server_prefix, entries[i]);
+                strcat(connection_string, temp);
+                free(temp);
+            }
+            else
+            {
+                //TODO
+            }
+        }
+    }
+    else
+    {
+        //TODO
+    }
+    return connection_string;
+}
+
+memcached_return_t set(memcached_st *memc, const char *key, const char *value, time_t t1, uint32_t t2)
+{
+    memcached_return_t result = memcached_set(memc, key, strlen(key), value, strlen(value), t1, t2);
+    if(result != MEMCACHED_SUCCESS)
+    {
+        //TODO
+    }
+    return result;
+}
+
 int main(int argc, char *argv[])
 {
     struct gengetopt_args_info *options = (struct gengetopt_args_info *) malloc(sizeof(struct gengetopt_args_info));
-    const char *server_prefix = "--SERVER=";
-    const size_t server_prefix_len = strlen(server_prefix);
-    char * connection_string;
+    char *connection_string;
 
     if (cmdline_parser(argc, argv, options) == 0)
     {
-        // Prepare get test
-        struct benchmark * set_test = prepare_set_benchmark();
-        if(!set_test)
-        {
-            clean_options(options);
-            free(set_test);
-            exit(EXIT_FAILURE);
-        }
+        unsigned int count = options->url_given ? options->url_given : 1;
+        connection_string = build_connection_string(options->url_arg, count);
 
-        // Prepare the memcached connection
-        unsigned int size = options->url_given == 0 ? 1 : options->url_given;
-        size_t len = 0;
-        for (int i = 0; i < size; i++)
-        {
-            len += server_prefix_len + strlen(options->url_arg[i]) + 2;
-        }
-        connection_string = (char *)malloc(len * sizeof(char));
         if(connection_string)
         {
-            memcpy(connection_string, "\0", 1);
-            for (int i = 0; i < options->url_given; i++)
+            // Prepare get test
+            struct benchmark * set_test = prepare_set_benchmark();
+            if(set_test)
             {
-                char *temp = (char *)malloc((server_prefix_len + strlen(options->url_arg[i]) + 2)*sizeof(char));
-                sprintf(temp, "%s%s ", server_prefix, options->url_arg[i]);
-                strcat(connection_string, temp);
-                free(temp);
+                memcached_st *memc = memcached(connection_string, strlen(connection_string));
+                if(memc)
+                {
+                    const char *key = "foo_123";
+                    const char *value = "foo_123";
+                    memcached_return_t result = set(memc, key, value, (time_t)0, (uint32_t)0);
+                    memcached_free(memc);
+                    if(result == MEMCACHED_SUCCESS)
+                    {
+                        // Calculate the used time
+                        set_test->end_time = time(NULL);
+                        double duration = difftime(set_test->end_time, set_test->start_time);
+                        printf("The benchmark test %s need %f seconds.\r\n", set_test->title, duration);
+
+                        // Free resources
+                        clean_options(options);
+                        free(connection_string);
+                        free(set_test);
+                        exit(EXIT_SUCCESS);
+                    }
+                    else
+                    {
+                        clean_options(options);
+                        free(connection_string);
+                        free(set_test);
+                        exit(EXIT_FAILURE);
+                    }
+                }
+                else
+                {
+                    clean_options(options);
+                    free(connection_string);
+                    free(set_test);
+                    printf("The memcached connection couldn't be established.");
+                    exit(EXIT_FAILURE);
+                }
+            }
+            else
+            {
+                clean_options(options);
+                free(connection_string);
+                exit(EXIT_FAILURE);
             }
         }
         else
         {
-            //TODO
-        }
-
-        // Open the connection
-        memcached_st *memc = memcached(connection_string, strlen(connection_string));
-        if(!memc)
-        {
             clean_options(options);
-            free(set_test);
-            free(connection_string);
-            printf("The connection couldn't established.\r\n");
+            printf("The connection string couldn't be build.");
             exit(EXIT_FAILURE);
         }
 
-        char *key ="foo_rand0000000000";
-        char *value="xxxxxxx";
-
-        // Send data to memcached
-        memcached_return_t rc = memcached_set(memc, key, strlen(key), value, strlen(value), (time_t)0, (uint32_t)0);
-
-        if(rc != MEMCACHED_SUCCESS)
-        {
-            //TODO
-            clean_options(options);
-            free(set_test);
-            free(connection_string);
-            memcached_free(memc);
-            printf("The operation wasn't successfully.\r\n");
-            exit(EXIT_FAILURE);
-        }
-
-        // Close connection and free
-        memcached_free(memc);
-
-        // Calculate the used time
-        set_test->end_time = time(NULL);
-        double duration = difftime(set_test->end_time, set_test->start_time);
-        printf("The benchmark test %s need %f seconds.\r\n", set_test->title, duration);
-
-        // Free resources
-        cmdline_parser_free(options);
-        free(options);
-        free(set_test);
-        free(connection_string);
-        exit(EXIT_SUCCESS);
     }
     else
     {
