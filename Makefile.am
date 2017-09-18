@@ -9,4 +9,4 @@ mcbenchmark_LDFLAGS = $(MEMCACHED_LIBS)
 BUILT_SOURCES = src/cmdline.c
 CLEANFILES = src/cmdline.c
 src/cmdline.c: src/mcbenchmark.ggo
-	$(GENGETOPT) --input=src/mcbenchmark.ggo --output-dir=src
+	$(GENGETOPT) --input=$(srcdir)/src/mcbenchmark.ggo --output-dir=$(srcdir)/src

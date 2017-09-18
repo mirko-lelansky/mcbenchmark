@@ -25,7 +25,7 @@ int main(int argc, char *argv[])
 {
     struct gengetopt_args_info *options = (struct gengetopt_args_info *) malloc(sizeof(struct gengetopt_args_info));
     struct benchmark *get_test = (struct benchmark *) malloc(sizeof(struct benchmark));
-    const char *server_prefix = "--SERVER";
+    const char *server_prefix = "--SERVER=";
     char * connection_string;
 
     if (cmdline_parser(argc, argv, options) != 0)
@@ -52,7 +52,6 @@ int main(int argc, char *argv[])
         strcpy(connection_string, server_prefix);
         strcat(connection_string, options->url_arg[0]);
     }
-
     // Open the connection
     memcached_st *memc = memcached(connection_string, strlen(connection_string));
     if(!memc)

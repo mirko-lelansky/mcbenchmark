@@ -3,7 +3,7 @@ AC_PREREQ([2.69])
 LT_PREREQ([2.4.6])
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_SRCDIR([src])
-AC_CONFIG_HEADERS([src/config.h])
+AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_AUX_DIR([build-aux])
 AM_INIT_AUTOMAKE([1.15 gnu subdir-objects -Wall -Werror])
 LT_INIT
