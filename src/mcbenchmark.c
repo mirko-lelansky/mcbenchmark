@@ -6,65 +6,88 @@
 #include <libmemcached-1.0/memcached.h>
 #include <time.h>
 #include <string.h>
+#include <stdbool.h>
 #include "cmdline.h"
 
 struct benchmark {
-    char *title;
-    time_t start_time;
+    unsigned int active_clients;
+    struct client *clients;
     time_t end_time;
-} benchmark;
+    time_t start_time;
+    char *title;
+};
 
+struct client {
+    memcached_st conn;
+};
 
 int main(int argc, char *argv[])
 {
-    struct gengetopt_args_info mcbenchmark_info;
+    struct gengetopt_args_info *options = (struct gengetopt_args_info *) malloc(sizeof(struct gengetopt_args_info));
+    struct benchmark *get_test = (struct benchmark *) malloc(sizeof(struct benchmark));
+    const char *server_prefix = "--SERVER";
+    char * connection_string;
 
-    if (cmdline_parser(argc, argv, &mcbenchmark_info) != 0)
+    if (cmdline_parser(argc, argv, options) != 0)
     {
-        exit(1);
+        cmdline_parser_free(options);
+        free(get_test);
+        printf("The commandline options couldn't parsed.\r\n");
+        exit(EXIT_FAILURE);
     }
-    struct benchmark get_method_test;
-    get_method_test.title = "GET-METHOD";
-    get_method_test.start_time = time(NULL);
 
-    char **server_urls = mcbenchmark_info.url_arg;
-    char *config_prefix="--SERVER=";
-    char *config_server = NULL;
+    // Prepare get test
+    get_test->title = "GET-METHOD";
+    get_test->start_time = time(NULL);
 
-    if(mcbenchmark_info.url_given)
+    // Prepare the memcached connection
+    if(options->url_given)
     {
         //TODO
     }
     else
     {
-        unsigned int config_server_size = strlen(server_urls[0]) + strlen(config_prefix) + 1;
-        config_server = malloc(config_server_size * sizeof(char));
-        strcpy(config_server, config_prefix);
-        strcat(config_server, server_urls[0]);
+        unsigned int config_server_size = strlen(options->url_arg[0]) + strlen(server_prefix) + 1;
+        connection_string = malloc(config_server_size * sizeof(char));
+        strcpy(connection_string, server_prefix);
+        strcat(connection_string, options->url_arg[0]);
     }
 
-    memcached_st *memc = memcached(config_server, strlen(config_server));
-    if(memc == NULL)
+    // Open the connection
+    memcached_st *memc = memcached(connection_string, strlen(connection_string));
+    if(!memc)
     {
-        exit(1);
+        cmdline_parser_free(options);
+        free(get_test);
+        printf("The connection couldn't established.\r\n");
+        exit(EXIT_FAILURE);
     }
 
     char *key ="foo_rand0000000000";
     char *value="xxxxxxx";
 
+    // Send data to memcached
     memcached_return_t rc = memcached_set(memc, key, strlen(key), value, strlen(value), (time_t)0, (uint32_t)0);
 
     if(rc != MEMCACHED_SUCCESS)
     {
-        //TODO handling
-        printf("An error occured.\r\n");
+        cmdline_parser_free(options);
+        free(get_test);
+        memcached_free(memc);
+        printf("The operation wasn't successfully.\r\n");
+        exit(EXIT_FAILURE);
     }
+
+    // Close connection and free
     memcached_free(memc);
 
-    get_method_test.end_time = time(NULL);
-    double duration = difftime(get_method_test.end_time, get_method_test.start_time);
-    printf("The benchmark test %s need %f seconds.\r\n", get_method_test.title, duration);
+    // Calculate the used time
+    get_test->end_time = time(NULL);
+    double duration = difftime(get_test->end_time, get_test->start_time);
+    printf("The benchmark test %s need %f seconds.\r\n", get_test->title, duration);
 
-    cmdline_parser_free(&mcbenchmark_info);
-    exit(0);
+    // Free resources
+    cmdline_parser_free(options);
+    free(get_test);
+    exit(EXIT_SUCCESS);
 }
