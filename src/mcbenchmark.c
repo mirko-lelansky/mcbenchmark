@@ -32,9 +32,9 @@ struct benchmark * prepare_benchmark(char *title)
     return test;
 }
 
-struct benchmark * prepare_get_benchmark()
+struct benchmark * prepare_set_benchmark()
 {
-    return prepare_benchmark("GET-TEST");
+    return prepare_benchmark("SET-TEST");
 }
 
 void clean_options(struct gengetopt_args_info *options)
@@ -53,11 +53,11 @@ int main(int argc, char *argv[])
     if (cmdline_parser(argc, argv, options) == 0)
     {
         // Prepare get test
-        struct benchmark * get_test = prepare_get_benchmark();
-        if(!get_test)
+        struct benchmark * set_test = prepare_set_benchmark();
+        if(!set_test)
         {
             clean_options(options);
-            free(get_test);
+            free(set_test);
             exit(EXIT_FAILURE);
         }
 
@@ -90,7 +90,7 @@ int main(int argc, char *argv[])
         if(!memc)
         {
             clean_options(options);
-            free(get_test);
+            free(set_test);
             free(connection_string);
             printf("The connection couldn't established.\r\n");
             exit(EXIT_FAILURE);
@@ -106,7 +106,7 @@ int main(int argc, char *argv[])
         {
             //TODO
             clean_options(options);
-            free(get_test);
+            free(set_test);
             free(connection_string);
             memcached_free(memc);
             printf("The operation wasn't successfully.\r\n");
@@ -117,14 +117,14 @@ int main(int argc, char *argv[])
         memcached_free(memc);
 
         // Calculate the used time
-        get_test->end_time = time(NULL);
-        double duration = difftime(get_test->end_time, get_test->start_time);
-        printf("The benchmark test %s need %f seconds.\r\n", get_test->title, duration);
+        set_test->end_time = time(NULL);
+        double duration = difftime(set_test->end_time, set_test->start_time);
+        printf("The benchmark test %s need %f seconds.\r\n", set_test->title, duration);
 
         // Free resources
         cmdline_parser_free(options);
         free(options);
-        free(get_test);
+        free(set_test);
         free(connection_string);
         exit(EXIT_SUCCESS);
     }
