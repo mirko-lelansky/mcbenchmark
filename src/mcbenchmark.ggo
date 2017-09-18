@@ -2,3 +2,4 @@ purpose "This is tool mearsure the performance of an Memcached."
 versiontext "Apache 2.0 mlelansky"
 
 option "url" u "The url of the Memcached server." string default="localhost:11211" optional multiple
+option "test" t "The test methods which should be run." enum values="get", "set" required multiple
