@@ -244,9 +244,9 @@ void * sendTask(void *args)
     }
     for (int i = 0; i < data->requests; i++)
     {
-        unsigned long start = generateTimeInMs();
         const char *key = "foo_123";
         char *value = generateRandomValue(data->payload);
+        unsigned long start = generateTimeInMs();
         if(value != NULL)
         {
             memcached_return_t result = memcached_set(data->memc, key, strlen(key), value, strlen(value), (time_t)0, (uint32_t)0);
