@@ -142,7 +142,7 @@ void run_get_test(struct gengetopt_args_info *options, char *connection_string)
             memcached_return_t result = set(memc, key, value, (time_t)0, (uint32_t)0);
             if(result == MEMCACHED_SUCCESS)
             {
-                get_test->start_time = time(NULL);
+                get_test->start_time = clock();
                 char *mem_value = get(memc, key, strlen(value), (time_t)0, result);
                 free(mem_value);
                 memcached_free(memc);
