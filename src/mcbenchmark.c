@@ -21,6 +21,23 @@ struct client {
     memcached_st conn;
 };
 
+char * build_value(short size)
+{
+    char * value = (char *)malloc((size + 3) * sizeof(char));
+    if(value)
+    {
+        memset(value, 'x', size);
+        value[size] = '\r';
+        value[size + 1] = '\n';
+        value[size + 2] = '\0';
+    }
+    else
+    {
+        //TODO
+    }
+    return value;
+}
+
 struct benchmark * prepare_benchmark(char *title)
 {
     struct benchmark *test = (struct benchmark *)malloc(sizeof(struct benchmark));
@@ -138,12 +155,13 @@ void run_get_test(struct gengetopt_args_info *options, char *connection_string)
         if(memc)
         {
             const char *key = "foo_124";
-            const char *value = "foo_124";
+            char *value = build_value(options->datasize_arg);
             memcached_return_t result = set(memc, key, value, (time_t)0, (uint32_t)0);
             if(result == MEMCACHED_SUCCESS)
             {
                 get_test->start_time = clock();
                 char *mem_value = get(memc, key, strlen(value), (time_t)0, result);
+                free(value);
                 free(mem_value);
                 memcached_free(memc);
 
@@ -196,8 +214,9 @@ void run_set_test(struct gengetopt_args_info *options, char *connection_string)
         if(memc)
         {
             const char *key = "foo_123";
-            const char *value = "foo_123";
+            char *value = build_value(options->datasize_arg);
             memcached_return_t result = set(memc, key, value, (time_t)0, (uint32_t)0);
+            free(value);
             memcached_free(memc);
             if(result == MEMCACHED_SUCCESS)
             {
@@ -236,6 +255,7 @@ int main(int argc, char *argv[])
     if (cmdline_parser(argc, argv, options) == 0)
     {
         unsigned int count = options->url_given ? options->url_given : 1;
+        options->datasize_arg = (options->datasize_arg < 0 || options->datasize_arg > 30000) ? 3 : options->datasize_arg;
         connection_string = build_connection_string(options->url_arg, count);
 
         if(connection_string)
