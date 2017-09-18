@@ -12,8 +12,8 @@
 struct benchmark {
     unsigned int active_clients;
     struct client *clients;
-    time_t end_time;
-    time_t start_time;
+    clock_t end_time;
+    clock_t start_time;
     char *title;
 };
 
@@ -27,7 +27,7 @@ struct benchmark * prepare_benchmark(char *title)
     if(test)
     {
         test->active_clients = 0;
-        test->start_time = time(NULL);
+        test->start_time = clock();
         test->title = title;
     }
     return test;
@@ -36,9 +36,10 @@ struct benchmark * prepare_benchmark(char *title)
 void finish_benchmark(struct benchmark *test)
 {
     // Calculate the used time
-    test->end_time = time(NULL);
-    double duration = difftime(test->end_time, test->start_time);
-    printf("The benchmark test %s need %f seconds.\r\n", test->title, duration);
+    test->end_time = clock();
+    double duration_in_micro = (double)(test->end_time - test->start_time);
+    double duration_in_sec = duration_in_micro/CLOCKS_PER_SEC;
+    printf("The benchmark test %s need %f seconds.\r\n", test->title, duration_in_sec);
 
     // Free resources
     free(test);
