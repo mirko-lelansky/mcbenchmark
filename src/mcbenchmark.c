@@ -31,6 +31,7 @@ int main(int argc, char *argv[])
     if (cmdline_parser(argc, argv, options) != 0)
     {
         cmdline_parser_free(options);
+        free(options);
         free(get_test);
         printf("The commandline options couldn't parsed.\r\n");
         exit(EXIT_FAILURE);
@@ -57,7 +58,9 @@ int main(int argc, char *argv[])
     if(!memc)
     {
         cmdline_parser_free(options);
+        free(options);
         free(get_test);
+        free(connection_string);
         printf("The connection couldn't established.\r\n");
         exit(EXIT_FAILURE);
     }
@@ -71,7 +74,9 @@ int main(int argc, char *argv[])
     if(rc != MEMCACHED_SUCCESS)
     {
         cmdline_parser_free(options);
+        free(options);
         free(get_test);
+        free(connection_string);
         memcached_free(memc);
         printf("The operation wasn't successfully.\r\n");
         exit(EXIT_FAILURE);
@@ -87,6 +92,8 @@ int main(int argc, char *argv[])
 
     // Free resources
     cmdline_parser_free(options);
+    free(options);
     free(get_test);
+    free(connection_string);
     exit(EXIT_SUCCESS);
 }
