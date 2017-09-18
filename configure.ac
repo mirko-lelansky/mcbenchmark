@@ -8,10 +8,12 @@ AC_CONFIG_AUX_DIR([build-aux])
 AM_INIT_AUTOMAKE([1.15 gnu subdir-objects -Wall -Werror])
 LT_INIT
 AC_PROG_CC
+AC_PROG_CC_STDC
 AC_PATH_PROG(GENGETOPT, gengetopt)
 AM_CONDITIONAL([GENGETOPT_MISSING], [test "x$GENGETOPT" = "x"])
 AM_COND_IF([GENGETOPT_MISSING], [AC_MSG_ERROR(The gengentop programm is missing.)])
 PKG_CHECK_MODULES([MEMCACHED], [libmemcached >= 0.8.0])
-AC_CHECK_HEADERS([getopt.h])
+AC_CHECK_HEADERS([getopt.h stdio.h])
+AX_PTHREAD([], [AC_MSG_ERROR(The pthread library is missing.)])
 AC_CONFIG_FILES([Makefile])
 AC_OUTPUT

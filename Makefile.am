@@ -2,8 +2,8 @@ ACLOCAL_AMFLAGS = -I m4 --install
 
 bin_PROGRAMS = mcbenchmark
 mcbenchmark_SOURCES = src/mcbenchmark.c src/cmdline.c
-mcbenchmark_CFLAGS = $(MEMCACHED_CFLAGS)
-mcbenchmark_LDFLAGS = $(MEMCACHED_LIBS)
+mcbenchmark_CFLAGS = $(MEMCACHED_CFLAGS) $(PTHREAD_CFLAGS)
+mcbenchmark_LDFLAGS = $(MEMCACHED_LIBS) $(PTHREAD_LIBS)
 
 
 BUILT_SOURCES = src/cmdline.c

@@ -4,3 +4,5 @@ versiontext "Apache 2.0 mlelansky"
 option "url" u "The url of the Memcached server." string default="localhost:11211" optional multiple
 option "test" t "The test methods which should be run." enum values="get", "set" required multiple
 option "datasize" d "The length in bytes for the values." short default="3" optional
+option "clients" c "The number of parallel clients." short default="50" optional
+option "requests" r "The number of requests per client." short default="200" optional
