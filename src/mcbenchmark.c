@@ -21,6 +21,7 @@ struct benchmarkData {
 };
 
 struct taskData {
+    char * key;
     unsigned short requests;
     memcached_st * memc;
     unsigned short payload;
@@ -38,13 +39,15 @@ unsigned long generateTimeInMs()
 
 char * generateRandomValue(unsigned short size)
 {
-    char * value = (char *)malloc((size + 3) * sizeof(char));
+    const char alphanum[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+    char * value = (char *)malloc((size + 1)* sizeof(char));
     if(value != NULL)
     {
-        memset(value, 'x', size);
-        value[size] = '\r';
-        value[size + 1] = '\n';
-        value[size + 2] = '\0';
+        for (unsigned short i = 0; i < size; i++)
+        {
+            value[i] = alphanum[rand() % (sizeof(alphanum) - 1)];
+        }
+        value[size] = 0;
     }
     else
     {
@@ -96,14 +99,10 @@ void finishBenchmark(struct benchmarkData *benchmark)
     unsigned long endTimeInMs = generateTimeInMs();
     unsigned long duration = endTimeInMs - benchmark->startTimeInMs;
     unsigned int seen = 0;
-    double perc, reqpersec = 0;
+    double perc, reqpermillisec = 0;
 
-    unsigned long durationInSec = duration / 1000;
+    reqpermillisec = benchmark->requests/duration;
 
-    if (durationInSec > 0)
-    {
-        reqpersec = benchmark->requests/durationInSec;
-    }
     // Print the results
     printf("====== %s ======\r\n", benchmark->title);
     printf("The benchmark sends %d requests %ld milli seconds.\r\n", benchmark->requests, duration);
@@ -116,7 +115,7 @@ void finishBenchmark(struct benchmarkData *benchmark)
         perc = (seen*100.0)/benchmark->requests;
         printf("%.2f%% <= %d milli seconds \r\n", perc, i);
     }
-    printf("%.2f requests per second\r\n", reqpersec);
+    printf("%.2f requests per milli second\r\n", reqpermillisec);
 
     // Free resources
     cleanBenchmark(benchmark);
@@ -177,63 +176,139 @@ char * generateConnectionUrl(char **entries, unsigned int count)
     }
 }
 
-/*void executeGetBenchmark(struct gengetopt_args_info *options, char *connection_string)
+void * getTask(void *args)
 {
-    // Prepare get test
-    struct benchmarkData * getData = prepareGetBenchmark(options);
-    if(getData)
+    struct taskData *data = (struct taskData *)args;
+    for (int i = 0; i < MAX_LATENCY; i++)
     {
-        memcached_st *memc = memcached(connection_string, strlen(connection_string));
-        if(memc)
+        data->times[i] = 0;
+    }
+    for (int i = 0; i < data->requests; i++)
+    {
+        unsigned long start = generateTimeInMs();
+        memcached_return result;
+        size_t valuelength;
+        uint32_t flags;
+        char * tmp = memcached_get(data->memc, data->key, strlen(data->key), &valuelength, &flags, &result);
+        if(tmp != NULL)
         {
-            const char *key = "foo_124";
-            char *value = generateRandomValue(options->datasize_arg);
-            memcached_return_t result = set(memc, key, value, (time_t)0, (uint32_t)0);
-            if(result == MEMCACHED_SUCCESS)
+            unsigned long end = generateTimeInMs();
+            unsigned long duration = end - start;
+            if(duration > MAX_LATENCY)
             {
-                getData->startTimeInMs = 0;
-                //char *mem_value = get(memc, key, strlen(value), (time_t)0, result);
-                free(value);
-                //free(mem_value);
-                memcached_free(memc);
+                duration = MAX_LATENCY;
+            }
+            data->times[duration]++;
+            free(tmp);
+        }
+    }
+    pthread_exit(0);
+}
 
+void executeGetBenchmark(struct gengetopt_args_info *options, char *connectionUrl)
+{
+    struct benchmarkData * getData = prepareGetBenchmark(options);
+    if(getData != NULL)
+    {
+        memcached_st * tmp = memcached(connectionUrl, strlen(connectionUrl));
+        if(tmp != NULL)
+        {
+            char * key = generateRandomValue(options->datasize_arg);
+            char * value = generateRandomValue(options->datasize_arg);
+            if(key != NULL && value != NULL)
+            {
+                memcached_return_t result = memcached_set(tmp, key, strlen(key), value, strlen(value), (time_t)0, (uint32_t)0);
                 if(result == MEMCACHED_SUCCESS)
                 {
-                    finishBenchmark(getData);
+                    free(value);
+
+                    pthread_t * workers = (pthread_t *) malloc(options->clients_arg * sizeof(pthread_t));
+                    if(workers != NULL)
+                    {
+                        struct taskData ** taskDatas = (struct taskData **)malloc(options->clients_arg * sizeof(struct taskData *));
+                        if(taskDatas != NULL)
+                        {
+                            for (int i = 0; i < options->clients_arg; i++)
+                            {
+                                taskDatas[i] = NULL;
+                            }
+
+                            // setup the parameter structure for the threads
+                            for (int i = 0; i < options->clients_arg; i++)
+                            {
+                                struct taskData * data = (struct taskData *)malloc(sizeof(struct taskData));
+                                if(data != NULL)
+                                {
+                                    data->memc = memcached(connectionUrl, strlen(connectionUrl));
+                                    data->payload = options->datasize_arg;
+                                    data->key = key;
+                                    data->requests = options->requests_arg;
+                                    taskDatas[i] = data;
+                                }
+                            }
+
+                            // create the threads
+                            for (int i = 0; i < options->clients_arg; i++)
+                            {
+                                if(taskDatas[i] != NULL)
+                                {
+                                    pthread_create(&workers[i], NULL, getTask, (void *)taskDatas[i]);
+                                }
+                            }
+
+                            // join the threads
+                            for (int i = 0; i < options->clients_arg; i++)
+                            {
+                                pthread_join(workers[i], NULL);
+                            }
+
+                            // combine the results
+                            for (int i = 0; i < options->clients_arg; i++)
+                            {
+                                unsigned int * times = taskDatas[i]->times;
+                                for (int j = 0; j < MAX_LATENCY; j++)
+                                {
+                                    getData->times[j] += times[j];
+                                }
+                                
+                            }
+
+                            free(key);
+                            
+                            // cleaning
+                            for (int i = 0; i < options->clients_arg; i++)
+                            {
+                                if(taskDatas[i] != NULL)
+                                {
+                                    memcached_free(taskDatas[i]->memc);
+                                    free(taskDatas[i]);
+                                }
+                            }
+                            free(taskDatas);
+                            free(workers);
+                        }
+                        else
+                        {
+                            free(workers);
+                            free(key);
+                        }
+                    }
+                    else
+                    {
+                        free(key);
+                    }
                 }
                 else
                 {
-                    cleanOptions(options);
-                    free(connection_string);
-                    free(getData);
-                    exit(EXIT_FAILURE);
+                    free(key);
+                    free(value);
                 }
             }
-            else
-            {
-                cleanOptions(options);
-                free(connection_string);
-                free(getData);
-                memcached_free(memc);
-                exit(EXIT_FAILURE);
-            }
+            memcached_free(tmp);
         }
-        else
-        {
-            cleanOptions(options);
-            free(connection_string);
-            free(getData);
-            printf("The memcached connection couldn't be established.");
-            exit(EXIT_FAILURE);
-        }
+        finishBenchmark(getData);
     }
-    else
-    {
-        cleanOptions(options);
-        free(connection_string);
-        exit(EXIT_FAILURE);
-    }
-}*/
+}
 
 void * sendTask(void *args)
 {
@@ -244,12 +319,13 @@ void * sendTask(void *args)
     }
     for (int i = 0; i < data->requests; i++)
     {
-        const char *key = "foo_123";
+        char *key = generateRandomValue(data->payload);
         char *value = generateRandomValue(data->payload);
         unsigned long start = generateTimeInMs();
-        if(value != NULL)
+        if(key != NULL && value != NULL)
         {
             memcached_return_t result = memcached_set(data->memc, key, strlen(key), value, strlen(value), (time_t)0, (uint32_t)0);
+            free(key);
             free(value);
             if(result == MEMCACHED_SUCCESS)
             {
@@ -276,12 +352,13 @@ void executeSetBenchmark(struct gengetopt_args_info *options, char *connectionUr
         if(workers != NULL)
         {
             struct taskData ** taskDatas = (struct taskData **)malloc(options->clients_arg * sizeof(struct taskData *));
-            for(int i = 0; i < options->clients_arg; i++)
-            {
-                taskDatas[i] = NULL;
-            }
             if(taskDatas != NULL)
             {
+                for(int i = 0; i < options->clients_arg; i++)
+                {
+                    taskDatas[i] = NULL;
+                }
+
                 // setup the parameter structure for the threads
                 for(int i = 0; i < options->clients_arg; i++)
                 {
@@ -361,7 +438,7 @@ int main(int argc, char *argv[])
                     switch (test_method) {
                         case test_arg_get:
                         {
-                            //executeGetBenchmark(options, connectionUrl);
+                            executeGetBenchmark(options, connectionUrl);
                             break;
                         }
                         case test_arg_set:
